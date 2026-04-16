@@ -1,0 +1,56 @@
+.event-card {
+  background: #fff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+.event-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+}
+.event-card-banner {
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+}
+.event-category {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+  padding: 0.2rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.sold-out {
+  background: #ff0000;
+  color: #fff;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.event-card-body { padding: 1rem; flex: 1; }
+.event-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 0.4rem; color: #1a1a2e; }
+.event-desc { color: #666; font-size: 0.875rem; margin-bottom: 0.8rem; }
+.event-meta {
+  display: flex; flex-direction: column; gap: 0.3rem;
+  font-size: 0.82rem; color: #555;
+}
+.event-card-footer { padding: 0.8rem 1rem; border-top: 1px solid #f0f0f0; }
+.btn-view {
+  display: inline-block;
+  background: #1a1a2e;
+  color: #fff;
+  padding: 0.5rem 1.2rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.btn-view:hover { background: #e94560; }
