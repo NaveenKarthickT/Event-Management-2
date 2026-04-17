@@ -151,19 +151,32 @@ def delete_event(event_id):
 # --- Bookings ---
 @app.route('/api/bookings', methods=['POST'])
 def book_event():
-    data = request.json
-    event = Event.query.get_or_404(data['event_id'])
-    if len(event.bookings) >= event.seats:
-        return jsonify({'error': 'No seats available'}), 400
-    existing = Booking.query.filter_by(user_id=data['user_id'], event_id=data['event_id']).first()
-    if existing:
-        return jsonify({'error': 'Already booked'}), 400
+    data     = request.json
+    event    = Event.query.get_or_404(data['event_id'])
+    seats    = int(data.get('seats', 1))
+    name     = data.get('name', 'Guest')
+    age      = data.get('age', '')
+    gender   = data.get('gender', '')
+
+    if len(event.bookings) + seats > event.seats:
+        return jsonify({'error': f'Only {event.seats - len(event.bookings)} seats left'}), 400
+
     import uuid
-    booking = Booking(user_id=data['user_id'], event_id=data['event_id'],
-                      ticket_id=str(uuid.uuid4())[:8].upper())
-    db.session.add(booking)
+    tickets_created = []
+    for _ in range(seats):
+        booking = Booking(
+            user_id=data['user_id'], event_id=data['event_id'],
+            ticket_id=str(uuid.uuid4())[:8].upper()
+        )
+        db.session.add(booking)
+        db.session.flush()   # get the id before commit
+        tickets_created.append({
+            'ticket_id': booking.ticket_id,
+            'name': name, 'age': age, 'gender': gender
+        })
+
     db.session.commit()
-    return jsonify({'message': 'Booking confirmed', 'booking': booking.to_dict()}), 201
+    return jsonify({'message': 'Booking confirmed', 'tickets': tickets_created}), 201
 
 
 @app.route('/api/bookings/user/<int:user_id>', methods=['GET'])
