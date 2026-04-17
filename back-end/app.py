@@ -9,8 +9,11 @@ CORS(app)
 
 # ─── DATABASE CONFIGURATION ───────────────────────────────────────────────────
 # SQLite (local file — easy for development)
-BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'events.db')}"
+import os
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+    'DATABASE_URL',
+    f"sqlite:///{os.path.join(BASE_DIR, 'events.db')}"
+)
 
 # To switch to PostgreSQL, replace the line above with:
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://username:password@localhost:5432/eventdb'
@@ -20,7 +23,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(BASE_DIR, 'eve
 # app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://username:password@localhost/eventdb'
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = 'your-secret-key-change-in-production'
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-me')
 
 db = SQLAlchemy(app)
 
@@ -222,6 +225,17 @@ def seed():
         db.session.add_all(events)
         db.session.commit()
         print("✅ Database seeded.")
+    
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve(path):
+    static = os.path.join(BASE_DIR, 'static')
+    if path and os.path.exists(os.path.join(static, path)):
+        return send_from_directory(static, path)
+    return send_from_directory(static, 'index.html')
+
+from flask import send_from_directory
 
 
 if __name__ == '__main__':
