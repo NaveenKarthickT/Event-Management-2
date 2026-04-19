@@ -10,6 +10,7 @@ CORS(app)
 # ─── DATABASE CONFIGURATION ───────────────────────────────────────────────────
 # SQLite (local file — easy for development)
 import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
     'DATABASE_URL',
     f"sqlite:///{os.path.join(BASE_DIR, 'events.db')}"
