@@ -1,28 +1,30 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import os
+import uuid
 
 app = Flask(__name__)
-CORS(app)
+
+# ─── CORS ─────────────────────────────────────────────────────────────────────
+CORS(app, origins=["http://localhost:5173", "https://your-app.vercel.app"])
+# ⚠️ Replace "https://your-app.vercel.app" with your actual Vercel URL
 
 # ─── DATABASE CONFIGURATION ───────────────────────────────────────────────────
-# SQLite (local file — easy for development)
-import os
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get(
+
+# Read DATABASE_URL from environment variable (set on Render dashboard)
+database_url = os.environ.get(
     'DATABASE_URL',
     f"sqlite:///{os.path.join(BASE_DIR, 'events.db')}"
 )
 
-# To switch to PostgreSQL, replace the line above with:
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://username:password@localhost:5432/eventdb'
-# Then install: pip install psycopg2-binary
+# ✅ FIX: Render gives "postgres://" but SQLAlchemy needs "postgresql://"
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
 
-# To switch to MySQL, use:
-# app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://username:password@localhost/eventdb'
-
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-me')
 
@@ -36,11 +38,14 @@ class User(db.Model):
     name     = db.Column(db.String(100), nullable=False)
     email    = db.Column(db.String(120), unique=True, nullable=False)
     password = db.Column(db.String(200), nullable=False)
-    role     = db.Column(db.String(20), default='user')  # user | organizer | admin
+    role     = db.Column(db.String(20), default='user')
     bookings = db.relationship('Booking', backref='user', lazy=True)
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'email': self.email, 'role': self.role}
+        return {
+            'id': self.id, 'name': self.name,
+            'email': self.email, 'role': self.role
+        }
 
 
 class Event(db.Model):
@@ -59,38 +64,43 @@ class Event(db.Model):
     def to_dict(self):
         booked = len(self.bookings)
         return {
-            'id': self.id, 'title': self.title, 'description': self.description,
-            'date': self.date, 'location': self.location, 'seats': self.seats,
-            'price': self.price, 'category': self.category,
+            'id': self.id, 'title': self.title,
+            'description': self.description,
+            'date': self.date, 'location': self.location,
+            'seats': self.seats, 'price': self.price,
+            'category': self.category,
             'organizer_id': self.organizer_id,
-            'available_seats': self.seats - booked, 'booked_count': booked
+            'available_seats': self.seats - booked,
+            'booked_count': booked
         }
 
 
 class Booking(db.Model):
     __tablename__ = 'bookings'
-    id         = db.Column(db.Integer, primary_key=True)
-    user_id    = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    event_id   = db.Column(db.Integer, db.ForeignKey('events.id'), nullable=False)
-    ticket_id  = db.Column(db.String(50), unique=True)
-    booked_at  = db.Column(db.DateTime, default=datetime.utcnow)
+    id        = db.Column(db.Integer, primary_key=True)
+    user_id   = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    event_id  = db.Column(db.Integer, db.ForeignKey('events.id'), nullable=False)
+    ticket_id = db.Column(db.String(50), unique=True)
+    booked_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
-            'id': self.id, 'user_id': self.user_id, 'event_id': self.event_id,
-            'ticket_id': self.ticket_id, 'booked_at': str(self.booked_at)
+            'id': self.id, 'user_id': self.user_id,
+            'event_id': self.event_id, 'ticket_id': self.ticket_id,
+            'booked_at': str(self.booked_at)
         }
 
-# ─── ROUTES ───────────────────────────────────────────────────────────────────
+# ─── ROUTES — Auth ────────────────────────────────────────────────────────────
 
-# --- Auth ---
 @app.route('/api/register', methods=['POST'])
 def register():
     data = request.json
     if User.query.filter_by(email=data['email']).first():
         return jsonify({'error': 'Email already registered'}), 400
-    user = User(name=data['name'], email=data['email'],
-                password=data['password'], role=data.get('role', 'user'))
+    user = User(
+        name=data['name'], email=data['email'],
+        password=data['password'], role=data.get('role', 'user')
+    )
     db.session.add(user)
     db.session.commit()
     return jsonify({'message': 'Registered successfully', 'user': user.to_dict()}), 201
@@ -99,13 +109,15 @@ def register():
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json
-    user = User.query.filter_by(email=data['email'], password=data['password']).first()
+    user = User.query.filter_by(
+        email=data['email'], password=data['password']
+    ).first()
     if not user:
         return jsonify({'error': 'Invalid credentials'}), 401
     return jsonify({'message': 'Login successful', 'user': user.to_dict()})
 
+# ─── ROUTES — Events ──────────────────────────────────────────────────────────
 
-# --- Events ---
 @app.route('/api/events', methods=['GET'])
 def get_events():
     events = Event.query.all()
@@ -122,9 +134,12 @@ def get_event(event_id):
 def create_event():
     data = request.json
     event = Event(
-        title=data['title'], description=data.get('description', ''),
-        date=data['date'], location=data['location'],
-        seats=data.get('seats', 100), price=data.get('price', 0.0),
+        title=data['title'],
+        description=data.get('description', ''),
+        date=data['date'],
+        location=data['location'],
+        seats=data.get('seats', 100),
+        price=data.get('price', 0.0),
         category=data.get('category', 'General'),
         organizer_id=data.get('organizer_id')
     )
@@ -151,29 +166,31 @@ def delete_event(event_id):
     db.session.commit()
     return jsonify({'message': 'Event deleted'})
 
+# ─── ROUTES — Bookings ────────────────────────────────────────────────────────
 
-# --- Bookings ---
 @app.route('/api/bookings', methods=['POST'])
 def book_event():
-    data     = request.json
-    event    = Event.query.get_or_404(data['event_id'])
-    seats    = int(data.get('seats', 1))
-    name     = data.get('name', 'Guest')
-    age      = data.get('age', '')
-    gender   = data.get('gender', '')
+    data   = request.json
+    event  = Event.query.get_or_404(data['event_id'])
+    seats  = int(data.get('seats', 1))
+    name   = data.get('name', 'Guest')
+    age    = data.get('age', '')
+    gender = data.get('gender', '')
 
     if len(event.bookings) + seats > event.seats:
-        return jsonify({'error': f'Only {event.seats - len(event.bookings)} seats left'}), 400
+        return jsonify({
+            'error': f'Only {event.seats - len(event.bookings)} seats left'
+        }), 400
 
-    import uuid
     tickets_created = []
     for _ in range(seats):
         booking = Booking(
-            user_id=data['user_id'], event_id=data['event_id'],
+            user_id=data['user_id'],
+            event_id=data['event_id'],
             ticket_id=str(uuid.uuid4())[:8].upper()
         )
         db.session.add(booking)
-        db.session.flush()   # get the id before commit
+        db.session.flush()
         tickets_created.append({
             'ticket_id': booking.ticket_id,
             'name': name, 'age': age, 'gender': gender
@@ -199,34 +216,7 @@ def admin_users():
     users = User.query.all()
     return jsonify([u.to_dict() for u in users])
 
-
-# ─── INIT DB WITH SEED DATA ───────────────────────────────────────────────────
-def seed():
-    if User.query.count() == 0:
-        admin = User(name='Admin', email='admin@example.com', password='admin123', role='admin')
-        org   = User(name='Event Organizer', email='org@example.com', password='org123', role='organizer')
-        usr   = User(name='John Doe', email='user@example.com', password='user123', role='user')
-        db.session.add_all([admin, org, usr])
-        db.session.commit()
-
-        events = [
-            Event(title='Music Fest 2025', description='Annual outdoor music festival.',
-                  date='2025-06-10', location='Mumbai', seats=500, price=499.0,
-                  category='Music', organizer_id=org.id),
-            Event(title='Tech Summit', description='Technology and innovation conference.',
-                  date='2025-07-15', location='Bangalore', seats=200, price=999.0,
-                  category='Tech', organizer_id=org.id),
-            Event(title='Art Exhibition', description='Contemporary art showcase.',
-                  date='2025-08-20', location='Delhi', seats=150, price=299.0,
-                  category='Art', organizer_id=org.id),
-            Event(title='Food Carnival', description='Street food festival.',
-                  date='2025-09-05', location='Chennai', seats=1000, price=0.0,
-                  category='Food', organizer_id=org.id),
-        ]
-        db.session.add_all(events)
-        db.session.commit()
-        print("✅ Database seeded.")
-    
+# ─── SERVE REACT FRONTEND ─────────────────────────────────────────────────────
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -236,8 +226,46 @@ def serve(path):
         return send_from_directory(static, path)
     return send_from_directory(static, 'index.html')
 
-from flask import send_from_directory
+# ─── SEED DATA ────────────────────────────────────────────────────────────────
 
+def seed():
+    if User.query.count() == 0:
+        admin = User(name='Admin', email='admin@example.com',
+                     password='admin123', role='admin')
+        org   = User(name='Event Organizer', email='org@example.com',
+                     password='org123', role='organizer')
+        usr   = User(name='John Doe', email='user@example.com',
+                     password='user123', role='user')
+        db.session.add_all([admin, org, usr])
+        db.session.commit()
+
+        events = [
+            Event(title='Music Fest 2025',
+                  description='Annual outdoor music festival.',
+                  date='2025-06-10', location='Mumbai',
+                  seats=500, price=499.0, category='Music',
+                  organizer_id=org.id),
+            Event(title='Tech Summit',
+                  description='Technology and innovation conference.',
+                  date='2025-07-15', location='Bangalore',
+                  seats=200, price=999.0, category='Tech',
+                  organizer_id=org.id),
+            Event(title='Art Exhibition',
+                  description='Contemporary art showcase.',
+                  date='2025-08-20', location='Delhi',
+                  seats=150, price=299.0, category='Art',
+                  organizer_id=org.id),
+            Event(title='Food Carnival',
+                  description='Street food festival.',
+                  date='2025-09-05', location='Chennai',
+                  seats=1000, price=0.0, category='Food',
+                  organizer_id=org.id),
+        ]
+        db.session.add_all(events)
+        db.session.commit()
+        print("✅ Database seeded.")
+
+# ─── START ────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
     with app.app_context():
