@@ -265,6 +265,11 @@ def seed():
         db.session.commit()
         print("✅ Database seeded.")
 
+with app.app_context():
+     db.create_all()
+
+
+
 # ─── START ────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
