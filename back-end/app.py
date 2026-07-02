@@ -8,7 +8,7 @@ import uuid
 app = Flask(__name__)
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
-CORS(app, origins=["http://localhost:5173", "https://your-app.vercel.app"])
+CORS(app, origins=["http://localhost:5173", "event-management-2-fzb5.onrender.com"])
 # ⚠️ Replace "https://your-app.vercel.app" with your actual Vercel URL
 
 # ─── DATABASE CONFIGURATION ───────────────────────────────────────────────────
