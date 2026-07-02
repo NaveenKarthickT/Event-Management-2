@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const BASE = "https://event-management-2-fzb5.onrender.com/api";
 
 export const api = {
   get:    (url)       => fetch(`${BASE}${url}`).then(r => r.json()),
